@@ -5,11 +5,8 @@ import asyncio
 import copy
 client = discord.Client()
 idiot_proof = True
-conversations = []
-tasks = []
-role_backup = {}
-
-emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣", "0️⃣", "🔟", "📗", "📘", "📙", "📓", "📒", "🔋", "🔮", "💣",
+server_configs = {}
+emojis = [":one:", ":two:", ":three:", ":four:", ":five:", ":six:", ":seven:", ":eight:", ":nine:", ":ten:", "📗", "📘", "📙", "📓", "📒", "🔋", "🔮", "💣",
     "🏹", "🗡", "⛏", "🎵", "🎲", "🏀", "👑", "🎁", "🚗", "🌍", "🚩"]
 
 
@@ -22,25 +19,46 @@ async def on_ready():
     print(client.user.name)
     print(client.user.id)
     print('------')
+    # add getting config from a database here
+    for server in client.servers:
+        if server_configs.get(server.id, None) is None:
+            server_configs[server.id] = ServerConfig(server.id)
 
 @client.event
 async def on_message(message):
     if client.user.mentioned_in(message) and message.author.id != client.user.id and not message.channel.is_private:
         await run_command(message, message.channel, message.author)
-                
+
+@client.event
+async def on_member_join(member):
+    if server_configs[member.server.id].welcome_channel is not None and len(server_configs[member.server.id].welcome_msg) > 0:
+        await client.send_message(server_configs[member.server.id].welcome_channel, server_configs[member.server.id].welcome_msg)
+async def on_member_leave(member):
+    if server_configs[member.server.id].welcome_channel is not None and len(server_configs[member.server.id].welcome_msg) > 0:
+        await client.send_message(server_configs[member.server.id].welcome_channel, server_configs[member.server.id].welcome_msg)
+@client.event
 async def run_command(message, channel, user):
+    config = server_configs[message.server.id]
     print(message.author.name + "[" + message.author.id + "]" + " : " + message.content)
     if message.author.server_permissions.administrator and "help" in message.content:
-        await client.send_message(message.author, "I currently support the following commands:\n\n**rolelist** - setup a list of roles that users can react to\n**private** - allows you to execute commands in the channel by pming them to me instead of saying them out loud\n**backup** - backs up the server, preserving channels, permissions, and roles\n**possess** - allows you to speak as me by pming me what you want me to say\n\n\nTo execute any of these commands, just ping me.")
+        await client.send_message(message.author, "I currently support the following commands:\n\n**rolelist** - setup a list of roles that users can react to\n**private** - allows you to execute commands in the channel by pming them to me instead of saying them out loud\n**backup** - backs up the server, preserving channels, permissions, and roles\n**possess** - allows you to speak as me by pming me what you want me to say\n**setwelcome <message>** - sets the welcome message for the server on the current channel\n\n\nTo execute any of these commands, just ping me.")
     elif message.author.server_permissions.administrator and "private" in message.content:
-        conversations.append(Conversation(message.user, message, "Opened private conversation"))
+        config.conversations.append(Conversation(message.user, message, "Opened private conversation"))
         await client.send_message(message.author, "Opened a private channel. Commands will be relayed to " + message.server.name + "** in channel #" + message.channel.name)
     elif message.author.server_permissions.administrator and "backup" in message.content:
         await backup_server(message.server)
     elif message.author.server_permissions.administrator and "possess" in message.content:
         await client.send_message(message.author, "You have now taken control of me. Any messages you send in this private chat will be relayed to server **" + message.server.name + "** in channel #" + message.channel.name + "\nTo terminate this connection, please react to the above message")
         asyncio.ensure_future(possess_loop(message.author, message.channel))
-    elif message.author.server_permissions.administrator and "rolelist" == message.content.lower():
+    elif message.author.server_permissions.administrator and "showconfig" in message.content:
+        await client.send_message(message.channel, "**Server configuration**\nI am keeping track of " + str(len(config.conversations)) + " conversations.\nI have ")
+        asyncio.ensure_future(possess_loop(message.author, message.channel))
+    elif message.author.server_permissions.administrator and "setwelcome" in message.content:
+        index = 
+        server_configs[member.server.id].welcome_channel = message.channel
+    elif message.author.server_permissions.administrator and "setgoodbye" in message.content:
+
+    elif message.author.server_permissions.administrator and "rolelist" in message.content.lower():
         total_roles = message.server.roles
         emoji_iterator = iter(emojis)
         react_message = ReactionRoleMessage()
@@ -50,7 +68,6 @@ async def run_command(message, channel, user):
                 reaction = next(emoji_iterator)
                 emoji_list.append(reaction)
                 react_message.addLine(reaction, role)
-                #print( reaction + ":" + role.name)
             else:
                 total_roles.remove(role)
         react_message.message = await client.send_message(message.channel, react_message.getText())
@@ -59,7 +76,7 @@ async def run_command(message, channel, user):
         stray_messages.append(await client.send_message(message.channel, message.author.mention + " Next: Are there any roles that shouldn't be on this list? Remove them now by reacting to the above message. For example, to remove role **" + example[0] + "** from the list, react with " + example[1]))
         stray_messages.append(await client.send_message(message.channel, "When you're finished, just say 'done'"))
         conversation = Conversation(message.author, react_message.message, "Deleting roles from list")
-        conversations.append(conversation)
+        config.conversations.append(conversation)
         for emote in emoji_list:
             await client.add_reaction(react_message.message, emote)
         try:
@@ -69,7 +86,7 @@ async def run_command(message, channel, user):
             return
         finally:
             remover.cancel()
-            conversations.remove(conversation)
+            config.conversations.remove(conversation)
             await client.delete_messages(iter(stray_messages))
             react_message.active = True
             asyncio.ensure_future(give_role_loop(react_message))
@@ -106,13 +123,14 @@ async def remove_role_loop(msg):
             await client.remove_roles(res.user, role)
 
 async def format_rolelist_loop(msg):
+    config = server_configs[msg.message.server.id]
     while(client.get_message(msg.message.channel, msg.message.id)):
         res = await client.wait_for_reaction(message=msg.message)
         while(res.user.id == client.user.id):
             res = await client.wait_for_reaction(message=msg.message)
         reaction = res.reaction
         user = res.user
-        conversation = getConversation(conversations, reaction.message, user)
+        conversation = getConversation(config.conversations, reaction.message, user)
         react_message = msg
         if conversation is not None and conversation.description == "Deleting roles from list":
             react_message.removeLine(reaction.emoji)
@@ -123,14 +141,24 @@ async def format_rolelist_loop(msg):
             return
 
 async def backup_server(server):
+    config = server_configs[server.id]
     user_roles = {}
-    role_backup[server.id] = user_roles
+    config.role_backup[server.id] = user_roles
     await client.request_offline_members(server)
     count = 0
     for member in server.members:
         user_roles[member.id] = member.roles
-        print("Giving " + member.name + " the roles [" + member.roles + "]")
-    print(count + "users backed up.")
+        for role in member.roles:
+            print("Giving " + member.name + " the role" + role.name)
+        count += 1
+    print(str(count) + " users backed up.")
+    count = 0
+    config.channel_backup[server.id] = []
+    for channel in server.channels:
+        print("Backing up #" + channel.name)
+        config.channel_backup[server.id].append(channel)
+        count += 1
+    print(str(count) + " channels backed up.")
 
 def getConversation(conversations, message, user):
     for conversation in conversations:
@@ -168,5 +196,14 @@ class ReactionRoleMessage:
     def getExample(self):
         return [list(self.role_dict.values())[0][1].name, list(self.role_dict.keys())[0]]
 
-
+class ServerConfig:
+    def __init__(self, id):
+        self.serverid = id
+        self.role_backup = {}
+        self.conversations = []
+        self.tasks = []
+        self.role_backup = {}
+        self.channel_backup = {}
+        self.welcome_msg = ""
+        self.welcome_channel = None
 client.run('NTI3OTA2OTc0MTkzNTQ5MzE0.DwmAqg.x-GYbJSWrQiNfYEZmBMEFkmVoFs')

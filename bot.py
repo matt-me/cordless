@@ -1,7 +1,7 @@
-
 import discord
 import asyncio
 import copy
+import rethinkdb as r
 client = discord.Client()
 idiot_proof = True
 server_configs = {}
@@ -22,6 +22,7 @@ async def on_ready():
     for server in client.servers:
         if server_configs.get(server.id, None) is None:
             server_configs[server.id] = ServerConfig(server.id)
+    
 
 @client.event
 async def on_message(message):
@@ -48,6 +49,10 @@ async def run_command(message, channel, user):
     if "help" in message.content.lower():
         await client.send_message(message.author, "I currently support the following commands:\n\n**rolelist** - setup a list of roles that users can react to\n**private** - allows you to execute commands in the channel by pming them to me instead of saying them out loud\n**backup** - backs up the server, preserving channels, permissions, and roles\n**possess** - allows you to speak as me by pming me what you want me to say\n**setwelcome <message>** - sets the welcome message for the server on the current channel\n**setgoodbye <message>** - sets a goodbye message to play when someone leaves\n\n\nTo execute any of these commands, just ping me.")
     elif "private" in message.content.lower():
+        if existing = getConversation(config.conversations, user, user)
+        if existing is not None:
+            existing.task.cancel()
+            config.conversations.remove(existing)
         config.conversations.append(Conversation(message.user, message, "Opened private conversation"))
         await client.send_message(message.author, "Opened a private channel. Commands will be relayed to " + message.server.name + "** in channel #" + message.channel.name)
     elif "backup" in message.content.lower():
@@ -226,4 +231,5 @@ class ServerConfig:
         self.goodbye_msg = ""
         self.debug_channel = None
 
+r.connect(host="127.0.0.1", port=28015).repl()
 client.run('NTI3OTA2OTc0MTkzNTQ5MzE0.DwmAqg.x-GYbJSWrQiNfYEZmBMEFkmVoFs')
